@@ -1,0 +1,149 @@
+networks:
+  public:
+  internal:
+  logs:
+  monitor:
+
+volumes:
+  es_data:
+  grafana_data:
+  crowdsec_data:
+
+services:
+  
+  traefik:
+    image: traefik:v2.11
+    command:
+      - --providers.docker=true
+      - --entrypoints.web.address=:80
+      - --api.insecure=true
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [public, internal, logs]
+
+  
+  waf:
+    image: owasp/modsecurity-crs:nginx
+    volumes:
+      - ./config/waf/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+      - ./config/waf/modsecurity.conf:/etc/nginx/templates/modsecurity.d/modsecurity.conf.template:ro
+      - ./config/waf/crs-setup.conf:/etc/nginx/templates/modsecurity.d/setup.conf.template:ro
+    networks: [internal, logs]
+    depends_on: [nextcloud]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.waf.rule=Host(`localhost`)"
+      - "traefik.http.routers.waf.entrypoints=web"
+      - "traefik.http.services.waf.loadbalancer.server.port=8080"
+
+      
+
+ 
+  nextcloud:
+    image: nextcloud:28
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloudpass
+      - REDIS_HOST=redis
+    volumes:
+      - ./data/nextcloud:/var/www/html
+    networks: [internal]
+    depends_on: [db, redis]
+
+  db:
+    image: mariadb:11
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloudpass
+    volumes:
+      - ./data/db:/var/lib/mysql
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+
+  
+  crowdsec:
+    image: crowdsecurity/crowdsec
+    environment:
+      - COLLECTIONS=crowdsecurity/nginx
+    volumes:
+      - crowdsec_data:/var/lib/crowdsec/data
+      - ./config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks: [logs]
+    depends_on: [traefik, waf]
+
+  traefik-bouncer:
+    image: fbonalair/traefik-crowdsec-bouncer
+    environment:
+      - CROWDSEC_LAPI_URL=http://crowdsec:8080
+      - CROWDSEC_BOUNCER_KEY=changeme
+    networks: [logs, public]
+    depends_on: [crowdsec]
+    labels:
+      - "traefik.enable=true"
+
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks: [logs]
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.4
+    volumes:
+      - ./config/logstash/pipeline.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks: [logs]
+    depends_on: [elasticsearch]
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks: [logs]
+    depends_on: [elasticsearch]
+
+ 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports: ["8081:8080"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitor]
+
+  prometheus:
+    image: prom/prometheus
+    ports: ["9090:9090"]
+    networks: [monitor]
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]
+    networks: [monitor]
+    volumes:
+      - grafana_data:/var/lib/grafana

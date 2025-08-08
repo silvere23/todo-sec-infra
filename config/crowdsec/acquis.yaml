@@ -1,0 +1,4 @@
+filenames:
+  - /var/lib/docker/containers/*/*-json.log
+labels:
+  type: nginx
