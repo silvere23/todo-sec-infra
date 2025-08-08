@@ -32,64 +32,69 @@ Le tout orchestré avec **Docker Compose**,
 
 ## Arborescence
 
+.
 ├── config/
-│ ├── crowdsec/
-│ ├── logstash/
-│ ├── prometheus/
-│ └── waf/
+│   ├── crowdsec/
+│   ├── logstash/
+│   ├── prometheus/
+│   └── waf/
 ├── dashboards/
-│ ├── grafana_json/
-│ └── kibana_export.ndjson
+│   ├── grafana_json/
+│   └── kibana_export.ndjson
 ├── data/
-│ ├── db/
-│ └── nextcloud/
+│   ├── db/
+│   └── nextcloud/
 ├── docs/
-│ ├── architecture.png
-│ └── rapport.md
+│   ├── architecture.png
+│   └── rapport.md
 ├── tests/
-│ ├── sqli.ps1
-│ └── xss.ps1
+│   ├── sqli.ps1
+│   └── xss.ps1
 ├── docker-compose.yml
 └── README.md
+
 
 ---
 
 ## Architecture simplifiée
 
-       [ Client Web ]
-             │
-     ┌───────▼────────────┐
-     │   Traefik Gateway  │ 
-     └───────┬────────────┘
-             │
-    ┌────────▼────────┐
-    │       WAF       │  
-    └────────┬────────┘
-             │
-    ┌────────▼────────────┐
-    │  Nextcloud (App)    │ 
-    └────┬──────────┬─────┘
-         │          │
-  ┌──────▼──┐  ┌────▼────────┐
-  │  Redis  │  │  MySQL      │
-  └─────────┘  └─────────────┘
-Logs ↘ ↙ Logs
-┌──────────────────────┐
-│ CrowdSec IDS/IPS     │
-└─────┬────────────────┘
-      │
-┌─────▼─────────┐
-│Traefik Bouncer│ 
-└───────────────┘
-        │
-    ┌───▼──────────────────────────────────┐
-    │           ELK Stack (SIEM)           │
-    │ Elasticsearch + Logstash + Kibana    │
-    └──────────────────────────────────────┘
-                  │
-    ┌─────────────▼─────────┐
-    │ Prometheus + Grafana  │
-    └───────────────────────┘
+              [ Client Web ]
+                     │
+          ┌──────────▼──────────┐
+          │    Traefik Gateway  │
+          └──────────┬──────────┘
+                     │
+             ┌───────▼───────┐
+             │      WAF      │
+             └───────┬───────┘
+                     │
+          ┌──────────▼──────────┐
+          │   Nextcloud (App)   │
+          └───────┬───────┬─────┘
+                  │       │
+             ┌────▼──┐ ┌──▼─────┐
+             │ Redis │ │ MySQL  │
+             └───┬────┘ └──┬────┘
+                 │         │
+             Logs▼         ▼Logs
+             ┌────────────────────┐
+             │  CrowdSec IDS/IPS  │
+             └────────┬───────────┘
+                      │
+            ┌─────────▼─────────────┐
+            │   Traefik Bouncer     │
+            └─────────┬─────────────┘
+                      │
+          ┌───────────▼──────────────┐
+          │     ELK Stack (SIEM)     │
+          │ Elasticsearch + Logstash │
+          │          + Kibana        │
+          └───────────┬──────────────┘
+                      │
+         ┌────────────▼────────────┐
+         │  Prometheus + Grafana   │
+         └─────────────────────────┘
+
 
 ---
 
